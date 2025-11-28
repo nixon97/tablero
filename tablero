@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mi Tablero de Ideas Mágico</title>
+    
+    <!-- Fuente amigable para niños -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Librería de Iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Librería para guardar imagen -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        :root {
+            /* Paleta de Colores Vibrantes */
+            --bg-board: #f0f4f8;
+            --dot-color: #d1d9e6;
+            --shadow-soft: 0 4px 6px rgba(0,0,0,0.1);
+            --shadow-lift: 0 15px 30px rgba(0,0,0,0.2);
+            
+            /* Colores de las notas */
+            --color-yellow: #fff475;
+            --color-pink: #fdcfe8;
+            --color-blue: #cbf0f8;
+            --color-green: #ccff90;
+            --color-purple: #d7aefb;
+            --color-orange: #ffcc80;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none; /* Prevenir selección de texto accidental al arrastrar */
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Fredoka', sans-serif;
+            overflow: hidden; /* El tablero maneja su propio scroll si es necesario */
+            background-color: var(--bg-board);
+        }
+
+        /* --- UI: BARRA SUPERIOR --- */
+        #toolbar {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+            align-items: center;
+        }
+
+        .btn-main {
+            border: none;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-family: 'Fredoka', sans-serif;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-main:active {
+            transform: scale(0.95);
+        }
+
+        #btn-add {
+            background: linear-gradient(135deg, #FF4081, #F50057);
+            color: white;
+            box-shadow: 0 4px 15px rgba(245, 0, 87, 0.4);
+        }
+
+        #btn-save {
+            background: linear-gradient(135deg, #00E5FF, #00B0FF);
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 176, 255, 0.4);
+        }
+
+        /* --- EL TABLERO (LIENZO) --- */
+        #board {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-image: radial-gradient(var(--dot-color) 2px, transparent 2px);
+            background-size: 30px 30px; /* Efecto de puntos */
+            overflow: hidden;
+            touch-action: none; /* Importante para gestos táctiles */
+        }
+
+        /* --- NOTAS (POST-ITS) --- */
+        .note {
+            position: absolute;
+            width: 240px;
+            min-height: 240px;
+            background-color: var(--color-yellow);
+            border-radius: 20px; /* Bordes muy redondeados */
+            box-shadow: var(--shadow-soft);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.2s, transform 0.2s;
+            cursor: grab;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .note:active {
+            cursor: grabbing;
+        }
+
+        .note.dragging {
+            box-shadow: var(--shadow-lift);
+            transform: scale(1.05) rotate(2deg); /* Efecto de elevación */
+            z-index: 999 !important;
+        }
+
+        /* Área de Texto */
+        .note-content {
+            flex-grow: 1;
+            font-size: 1.2rem;
+            color: #333;
+            outline: none;
+            line-height: 1.5;
+            user-select: text; /* Permitir seleccionar texto para editar */
+            cursor: text;
+            white-space: pre-wrap;
+            font-weight: 500;
+        }
+        
+        .note-content:empty:before {
+            content: '¡Escribe aquí!';
+            color: rgba(0,0,0,0.3);
+        }
+
+        /* Controles de la Nota */
+        .note-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .note:hover .note-controls, 
+        .note:focus-within .note-controls,
+        .note.active .note-controls {
+            opacity: 1;
+        }
+
+        /* Selector de Color */
+        .color-picker {
+            display: flex;
+            gap: 5px;
+        }
+
+        .color-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.5);
+            transition: transform 0.2s;
+        }
+        
+        .color-dot:hover {
+            transform: scale(1.2);
+            border-color: rgba(0,0,0,0.2);
+        }
+
+        .btn-delete {
+            background: none;
+            border: none;
+            color: #ff5252;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+
+        .btn-delete:hover {
+            background: rgba(255, 82, 82, 0.1);
+        }
+
+        /* --- ANIMACIONES --- */
+        @keyframes popIn {
+            from { transform: scale(0) rotate(-10deg); opacity: 0; }
+            to { transform: scale(1) rotate(0); opacity: 1; }
+        }
+
+        /* Mensaje de éxito al guardar */
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: 600;
+            transition: transform 0.3s;
+            z-index: 2000;
+        }
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Barra de Herramientas -->
+    <div id="toolbar">
+        <button id="btn-add" class="btn-main" onclick="createNote()">
+            <i class="fa-solid fa-plus"></i> Nueva Nota
+        </button>
+        <button id="btn-save" class="btn-main" onclick="saveBoard()">
+            <i class="fa-solid fa-camera"></i> Foto
+        </button>
+    </div>
+
+    <!-- El Tablero -->
+    <div id="board">
+        <!-- Las notas se generarán aquí -->
+    </div>
+
+    <!-- Mensaje Toast -->
+    <div id="toast">¡Tablero guardado como imagen! 📸</div>
+
+    <script>
+        const board = document.getElementById('board');
+        let zIndexCounter = 10; // Para manejar qué nota está encima
+
+        // Paleta de colores para las notas
+        const colors = [
+            { bg: '#fff475', name: 'Amarillo' },
+            { bg: '#fdcfe8', name: 'Rosa' },
+            { bg: '#cbf0f8', name: 'Azul' },
+            { bg: '#ccff90', name: 'Verde' },
+            { bg: '#d7aefb', name: 'Lila' },
+            { bg: '#ffcc80', name: 'Naranja' }
+        ];
+
+        // Crear una nota de bienvenida al inicio
+        window.onload = () => {
+            createNote(window.innerWidth / 2 - 120, window.innerHeight / 2 - 120, "¡Bienvenido a tu tablero!\n\n✨ Haz doble clic para escribir.\n✨ Arrástrame por todos lados.\n✨ Cambia mi color abajo.");
+        };
+
+        function createNote(x = null, y = null, text = "") {
+            const note = document.createElement('div');
+            note.className = 'note';
+            
+            // Posición aleatoria si no se especifica
+            const posX = x !== null ? x : Math.random() * (window.innerWidth - 300) + 20;
+            const posY = y !== null ? y : Math.random() * (window.innerHeight - 300) + 80;
+            
+            note.style.left = `${posX}px`;
+            note.style.top = `${posY}px`;
+            note.style.zIndex = zIndexCounter++;
+            note.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)].bg;
+
+            // HTML interno de la nota
+            note.innerHTML = `
+                <div class="note-content" contenteditable="true" spellcheck="false">${text}</div>
+                <div class="note-controls">
+                    <div class="color-picker">
+                        ${colors.map(c => `<div class="color-dot" style="background-color: ${c.bg}" onclick="changeColor(this, '${c.bg}')" title="${c.name}"></div>`).join('')}
+                    </div>
+                    <button class="btn-delete" onclick="deleteNote(this)" title="Borrar nota">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            `;
+
+            // Eventos para arrastrar y enfocar
+            note.addEventListener('mousedown', startDrag);
+            note.addEventListener('touchstart', startDrag, { passive: false });
+            note.addEventListener('mousedown', () => bringToFront(note));
+            
+            board.appendChild(note);
+        }
+
+        function deleteNote(btn) {
+            const note = btn.closest('.note');
+            note.style.transform = "scale(0)"; // Animación de salida
+            setTimeout(() => note.remove(), 200);
+        }
+
+        function changeColor(dot, color) {
+            const note = dot.closest('.note');
+            note.style.backgroundColor = color;
+        }
+
+        function bringToFront(note) {
+            zIndexCounter++;
+            note.style.zIndex = zIndexCounter;
+        }
+
+        // --- Lógica de Arrastrar (Drag & Drop) ---
+        let activeNote = null;
+        let startX, startY, initialLeft, initialTop;
+
+        function startDrag(e) {
+            // Ignorar si se hace clic en los controles o en el contenido editable
+            if (e.target.closest('.note-controls') || e.target.classList.contains('note-content')) {
+                return;
+            }
+
+            activeNote = e.currentTarget;
+            activeNote.classList.add('dragging');
+            bringToFront(activeNote);
+
+            // Obtener coordenadas iniciales (Mouse o Touch)
+            const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+
+            startX = clientX;
+            startY = clientY;
+            
+            const rect = activeNote.getBoundingClientRect();
+            // Necesitamos la posición relativa al padre, no al viewport, pero como body es relativo funciona similar
+            // Usamos offsetLeft/Top para mayor precisión dentro del contenedor
+            initialLeft = activeNote.offsetLeft;
+            initialTop = activeNote.offsetTop;
+
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+            document.addEventListener('touchmove', drag, { passive: false });
+            document.addEventListener('touchend', stopDrag);
+        }
+
+        function drag(e) {
+            if (!activeNote) return;
+            e.preventDefault(); // Prevenir scroll en móviles
+
+            const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+            const dx = clientX - startX;
+            const dy = clientY - startY;
+
+            activeNote.style.left = `${initialLeft + dx}px`;
+            activeNote.style.top = `${initialTop + dy}px`;
+        }
+
+        function stopDrag() {
+            if (activeNote) {
+                activeNote.classList.remove('dragging');
+                activeNote = null;
+            }
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+            document.removeEventListener('touchmove', drag);
+            document.removeEventListener('touchend', stopDrag);
+        }
+
+        // --- Guardar como Imagen ---
+        function saveBoard() {
+            // Ocultar la barra de herramientas temporalmente para la foto
+            const toolbar = document.getElementById('toolbar');
+            toolbar.style.display = 'none';
+
+            // Usar html2canvas
+            html2canvas(document.body, {
+                backgroundColor: '#f0f4f8', // Asegurar color de fondo
+                scale: 2 // Mejor calidad
+            }).then(canvas => {
+                // Crear enlace de descarga
+                const link = document.createElement('a');
+                link.download = 'mi-tablero-creativo.png';
+                link.href = canvas.toDataURL();
+                link.click();
+
+                // Restaurar barra y mostrar mensaje
+                toolbar.style.display = 'flex';
+                showToast();
+            });
+        }
+
+        function showToast() {
+            const toast = document.getElementById('toast');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+    </script>
+</body>
+</html>
